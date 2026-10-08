@@ -8,7 +8,9 @@ application in [Chapter 8](08-application-shell.md).
 Notation: `U` is a fresh uniform random number in [0, 1). `coin` is `U < 0.5`. `ε = 2⁻²⁴`.
 `|v|` is vector length. All distances are in **screen pixels**; the y axis points **down**.
 `rms(x)` converts a duration of `x` milliseconds to whole milliseconds, rounding halves up
-(`floor(x + 0.5)`; every argument in this chapter is ≥ 0). The RI applies it wherever it turns a
+(`floor(x + 0.5)`; every argument in this chapter is ≥ 0 except the duration draw of a behavior
+with MinDuration > MaxDuration, §3.9.1, where the RI rounds halves away from zero; the two rules
+differ only at exact half-millisecond ties). The RI applies it wherever it turns a
 computed number of seconds or milliseconds into a time span (§6.3).
 
 ---
@@ -25,32 +27,34 @@ computed number of seconds or milliseconds into a time span (§6.3).
 | **Context**         | Shared, per-session settings and world state, read by every sprite (§6.2). |
 | **Interaction**     | Per (initiator instance × interaction definition) runtime record (§6.10). |
 
-All sprites live in one **sprite collection** owned by the host loop. Sprites spawned during an
-update (effects, house visitors) are put into the context's *pending* list and added by the host
-at the start of the next frame (Chapter 8 §8.6).
+All sprites live in one **sprite collection** owned by the host loop. New sprites — effects
+spawned during a pony's update, and house visitors, which the host's per-frame house call creates
+(§6.13) rather than a sprite update — are put into the context's *pending* list. They are queued
+at the start of the next frame and added (and started) in that frame's queued-action step, before
+any sprite is updated (Chapter 8 §8.6 steps 1 and 8).
 
 ## 6.2 Context (world settings)
 
 Every pony and effect reads these values. The host refreshes them from the user options **every
 frame**, so option changes apply live.
 
-| Context value            | Source option (Chapter 8)        | Use |
+| Context value            | Source option (§5.1)             | Use |
 |--------------------------|----------------------------------|-----|
-| EffectsEnabled           | Pony effects enabled             | §6.8 |
-| SpeechEnabled            | Pony speech enabled              | §6.9 |
-| InteractionsEnabled      | Pony interactions enabled        | §6.10 |
-| RandomSpeechChance       | Speech probability (0–1)         | §6.9 |
-| CursorAvoidanceEnabled   | Cursor avoidance enabled         | §6.11, §6.12 |
-| CursorAvoidanceRadius    | Cursor avoidance size (px)       | §6.12.6 |
-| DraggingEnabled          | Pony dragging enabled            | §6.11 |
-| PonyAvoidanceEnabled     | Ponies avoid each other          | §6.12.5 |
-| WindowAvoidanceEnabled   | Avoid windows (Windows-only in RI) | §6.12.5 |
-| StayInContainingWindow   | Window containment (Windows-only in RI) | §6.12.5 |
-| TimeFactor               | Time scale, 0.1–10               | §6.3 |
-| ScaleFactor              | Sprite scale, 0.25–4             | §6.2.1 |
-| Region                   | Allowed area (screen rectangle)  | §6.12 |
-| ExclusionZone            | Normalised sub-rectangle of Region to avoid | §6.12 |
-| TeleportationEnabled     | Teleport back into bounds        | §6.12.3 |
+| EffectsEnabled           | EffectsEnabled                   | §6.8 |
+| SpeechEnabled            | SpeechEnabled                    | §6.9 |
+| InteractionsEnabled      | InteractionsEnabled              | §6.10 |
+| RandomSpeechChance       | SpeechChance (0–1)               | §6.9 |
+| CursorAvoidanceEnabled   | CursorAwareness                  | §6.11, §6.12 |
+| CursorAvoidanceRadius    | CursorAvoidanceRadius (px)       | §6.12.6 |
+| DraggingEnabled          | DraggingEnabled                  | §6.11 |
+| PonyAvoidanceEnabled     | PoniesAvoidPonies                | §6.12.5 |
+| WindowAvoidanceEnabled   | WindowAvoidance (Windows-only in RI) | §6.12.5 |
+| StayInContainingWindow   | WindowContainment (Windows-only in RI) | §6.12.5 |
+| TimeFactor               | TimeFactor, 0.1–10               | §6.3 |
+| ScaleFactor              | ScaleFactor, 0.25–4              | §6.2.1 |
+| Region                   | allowed area (screen rectangle, §5.2) | §6.12 |
+| ExclusionZone            | ExclusionZone (normalised sub-rectangle of Region to avoid) | §6.12 |
+| TeleportationEnabled     | TeleportEnabled                  | §6.12.3 |
 | CursorLocation           | Mouse position, updated each frame | §6.11 |
 | Sprites                  | The live sprite collection       | follow/interaction/avoidance lookups |
 
@@ -522,8 +526,9 @@ For each effect definition `E` to start:
   ScaleFactor 1.3 = 97.5: effect 98, pony 97). Placement uses the unrounded `e`, so the placed
   and reported sizes can differ by 1 px.
 * The instance's clock starts at the pony's internal time of the spawn and its external
-  last-update time at the step's external time, so it ages consistently even though it is added
-  to the sprite collection at the start of the next frame.
+  last-update time at the step's external time, so it ages consistently even though it is queued
+  at the start of the next frame and added (and started) in that frame's queued-action step,
+  before any sprite is updated (Chapter 8 §8.6 steps 1 and 8).
 * The instance is added to the pony's `activeEffects`; when the pony expires, all its active
   effects expire.
 
@@ -587,9 +592,12 @@ soundToStart ← line.SoundFile (may be none)
   SpeechEnabled is checked.
 * A new speech replaces any bubble currently shown.
 * The bubble is hidden in the first step where `t − speechStart > speechDuration`.
-* `soundToStart` is reported to the host for the frame in which it was set and cleared at the
-  start of the next `Update`. If several steps in one frame each speak, only the last sound is
-  reported.
+* `soundToStart` is cleared at the start of every `Update`, and the host reads it once per
+  frame, after all updates. It is therefore reported only if set during that pony's own Update in
+  the current frame, or by an initiator updated later in the same frame; other requests (the
+  start line at Start, §6.15; external `SetBehavior`/`Speak` calls; a target's start speech set
+  by an initiator updated earlier) are cleared before the sound pass (RI defect, Chapter 8 §8.7).
+  If several steps in one frame each speak, only the last sound is reported.
 
 ### 6.9.2 Speech triggers
 
@@ -785,8 +793,8 @@ saved, and skip the hover-exit restore while `inSleep`.
 
 ## 6.12 Staying on screen
 
-The **allowed region** `R` is a screen rectangle (Chapter 8: union of monitor work areas, or a
-user-chosen rectangle clipped to the screens). `X` is the exclusion region (§6.2).
+The **allowed region** `R` is a screen rectangle (Chapter 5 §5.2; in games the game area,
+Chapter 9 §9.3). `X` is the exclusion region (§6.2).
 
 ### 6.12.1 In-region destination — `InRegionDestination()`
 
@@ -944,7 +952,9 @@ move by itself, but the user can drag it like a non-following effect (§6.8.4, C
 * **Placement**: when added, its top-left is chosen uniformly so that its (unscaled) image fits
   inside the allowed area.
 * **Initial roster**: on creation, every pony instance already on screen whose directory is in
-  the house's visitor list counts as *deployed* by this house.
+  the house's visitor list counts as *deployed* by this house. The `all` entry is not special
+  here: it is matched literally like any other entry and matches no directory, so a house whose
+  list is only `all` starts with an empty roster.
 * **Door**: `door = topLeft + DoorPosition` (DoorPosition is **not** multiplied by ScaleFactor
   in the RI). It is not stored but recomputed whenever used, so dragging a house moves its door:
   new visitors appear at the current door and recalling ponies are re-routed every frame (the

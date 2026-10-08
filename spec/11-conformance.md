@@ -102,16 +102,18 @@ optional.
   | Bottom_Right | Top_Left | (300, 380) |
   | Top       | Bottom    | (240, 290) |
 * **Free-movement angle**: `Diagonal_horizontal` → |angle from horizontal| ∈ [15°, 45°);
-  `Diagonal_Vertical` → [45°, 75°); `Diagonal_Only`/`All` (diagonal pick) → [15°, 75°).
+  `Diagonal_Vertical` → (45°, 75°]; `Diagonal_Only`/`All` (diagonal pick) → (15°, 75°].
 * **Point target**: TargetX = 50, TargetY = 50, allowed area (0, 0, 1920, 1040) → destination
   (960, 520) for the anchor.
 * **Mirror offset**: offset (−37, −2), target facing left → destination = target + (37, −2).
 
 ## 11.5 Animation vectors (§7.4)
 
-* Delays [40, 80, 40] ms (mixed), τ = 0, 40, …, 400 → frames 0 0 1 1 0 0 1 1 0 0 1 (frame 2
-  never shown).
-* Delays [50, 50, 50] (uniform): τ 0→0, 49→0, 50→1, 99→1, 100→2, 149→2, 150→0.
+* Delays [40, 80, 40] ms (mixed), loop count 0, prevent-loop off, τ = 0, 40, …, 400 → frames
+  0 0 1 1 0 0 1 1 0 0 1 (frame 2 never shown). Loop count 1 (or prevent-loop on) → 0 0 1 1 2 2 …
+  (frame 2 held from τ = 160).
+* Delays [50, 50, 50] (uniform), loop count 0, prevent-loop off: τ 0→0, 49→0, 50→1, 99→1,
+  100→2, 149→2, 150→0.
 * Delays [40, 40, 40]: τ = 40 → frame 1 (uniform boundary belongs to the next frame).
 * Delays [100, 100, 100], loop count 1 (no NETSCAPE block): τ = 50 → 0; τ = 350 → 2 (held).
   Loop count 0: τ = 350 → 0.

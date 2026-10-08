@@ -271,7 +271,7 @@ Behavior,⟨Name⟩,⟨Chance⟩,⟨MaxDuration⟩,⟨MinDuration⟩,⟨Speed⟩
 | 23 | FollowOffsetType       | enum       | Defaulted | `Fixed` \| `Mirror` (case-**sensitive**; RI also accepts `0`/`1`) | `Fixed` | — |
 
 Additional load-time rule: if MinDuration > MaxDuration a warning is recorded but the values are
-kept as written. The duration draw (§6.5.3) is `Min + U·(Max − Min)`, which still produces a value
+kept as written. The duration draw (§6.5.1) is `Min + U·(Max − Min)`, which still produces a value
 between the two, so the effect is the same as if they were swapped.
 
 > **Pitfall:** image centers MUST be quoted (`"44,46"`). Unquoted, `44,46` becomes two fields and
@@ -325,7 +325,7 @@ The exact angles and the selection procedure are in §6.6.2.
   warns about cycles (it does not reject them); the runtime tolerates them (a cycle simply loops
   forever).
 * **StartSpeech** — name of a speech (§3.11) spoken when the behavior is entered *with speech
-  enabled for that transition* (§6.5.1).
+  enabled for that transition* (§6.9.2; see also §6.5.1).
 * **EndSpeech** — name of a speech spoken when the behavior ends because its time ran out.
   If the next behavior has a start speech, that speech replaces this one immediately (only one
   bubble is visible at a time).
@@ -546,7 +546,7 @@ Full runtime rules: §6.10.
 | Behavior.FollowStopped/MovingBehavior       | this pony's behaviors                    | case-insensitive  | unique match |
 | Effect.BehaviorName                         | this pony's behaviors                    | case-insensitive  | **every** match fires |
 | Behavior.FollowTarget                       | directory names of *live instances*      | case-sensitive    | any instance except the pony itself |
-| Interaction.Targets                         | directory names of *live instances*      | case-sensitive    | any instance |
+| Interaction.Targets                         | directory names of *live instances*      | case-sensitive    | any instance except the initiator itself |
 | Interaction.Behaviors                       | each participant's behaviors             | case-insensitive  | set membership |
 
 **Unique match:** if exactly one entity matches, use it; if zero *or two or more* match, the

@@ -17,7 +17,7 @@ the options every frame, so changes made while ponies run apply immediately.
 | DraggingEnabled            | bool            | true            |                    | §6.11.2, §8.8 |
 | InteractionsEnabled        | bool            | true            |                    | §6.10 |
 | *DisplayInteractionErrors* | bool            | false           |                    | persisted only, no effect |
-| ExclusionZone              | 4 × real        | (0,0,0,0)       | each 0 – 1         | normalised (x, y, w, h) sub-rectangle of the allowed area that ponies avoid (§6.2, §6.12). Zero size = none. Every assignment trims w and h so that x + w ≤ 1 and y + h ≤ 1 (§5.3.2). |
+| ExclusionZone              | 4 × real        | (0,0,0,0)       | each 0 – 1         | normalised (x, y, w, h) sub-rectangle of the allowed area that ponies avoid (§6.2, §6.12). Zero size = none (RI: only partly — the natural-return and in-bounds tests still treat a zero-size zone as a point or line, §6.2, §6.12.2, Q81). Every assignment trims w and h so that x + w ≤ 1 and y + h ≤ 1 (§5.3.2). |
 | ScaleFactor                | real            | 1               | 0.25 – 4           | Sprite size multiplier (§6.2.1). |
 | MaxPonyCount               | int             | 500             | 0 – 10000 (fallback **300**) | Launch refuses more (§8.5); houses stop deploying at this count. Not enforced by the "Add Pony" menu. |
 | *AlphaBlending*            | bool            | true            |                    | persisted only, no effect |
@@ -86,10 +86,15 @@ define bounds enforcement accordingly.
 
 * Directory `Profiles/` (relative to the program's content root, Chapter 2).
 * A profile named *N* is stored in `Profiles/N.ini`.
-* Reserved names (case-insensitive):
-  * `default` — built-in defaults; never stored, cannot be saved, copied over or deleted.
-  * `screensaver` — used in screensaver mode (§8.11).
-  * `autostart` — used when launched with the `autostart` argument (§8.3).
+* Reserved names:
+  * `default` (case-insensitive) — built-in defaults; never stored, cannot be saved, copied over
+    or deleted.
+  * `screensaver` — used by a screensaver (`.scr`) executable (§8.2, §8.11).
+  * `autostart` — loaded for the `autostart` argument, but replaced by the `current.txt`
+    selection in the RI (§8.3).
+* Only `default` is case-insensitive. `screensaver` and `autostart` are otherwise file names
+  (file-system case rules) subject to the case-sensitive list lookup of §8.2; `screensaver` is
+  compared case-insensitively only for the options dialog's screensaver-sound checkbox (§5.1).
 * A valid profile name is non-empty, not `default`, and contains no character invalid in a file
   name on the host OS.
 * `Profiles/current.txt` holds the name of the last selected profile (UTF-8, normally with BOM,

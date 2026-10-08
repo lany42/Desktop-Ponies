@@ -149,7 +149,9 @@ its hostile list `{10,10,10,8}` means: when the other team last touched the ball
 * Launch: create each goal and the scoreboard once, as a plain non-following, non-expiring effect
   sprite with its top-left at its start point (plus the four scoreboard labels, §9.5.6); then,
   per team in position order, initialise each filled position (box and start point, §9.2.4) and
-  add its player pony; place nothing else. The Context for a game is the desktop Context
+  add its player pony; finally initialise each ball: convert its start point (§9.2.8) and set
+  it as the ball's Location; the ball sprite is not added until AddBalls (§9.5.1). Place nothing
+  else. The Context for a game is the desktop Context
   with: allowed region = the game area, no exclusion zone, window avoidance/containment off,
   teleport on, **cursor awareness off**.
 * Goals and the scoreboard never move by themselves and are never reset, but like any effect the
@@ -222,9 +224,9 @@ Let `d` = distance from the player's anchor to the nearest active ball's anchor.
 Then:
 
 * If the player is already executing an action from the **same list**: keep it — except for the
-  have-ball list, where after the kick cool-down (§ below) a new action is drawn. During the
-  cool-down, a manually controlled player whose cool-down is between 2 and 3 s says "Can't kick
-  again so soon!".
+  have-ball list, where after the kick cool-down (see Kick cool-down below) a new action is
+  drawn. During the cool-down, a manually controlled player whose cool-down is between 2 and 3 s
+  says "Can't kick again so soon!".
 * Otherwise draw an action uniformly from the list entries and perform it. The action and list
   are remembered only if the action completed (blocked kicks, action 5 for a manually controlled
   player, action 5's fallback shot, and an Idle on a player already idle are re-drawn next

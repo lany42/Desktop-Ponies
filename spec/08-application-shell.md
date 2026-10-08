@@ -175,7 +175,9 @@ Per frame, in this order:
 2. Read the **cursor position** (screen coordinates) into the Context.
 3. **Synchronise** the Context with the options (§5.1), then let every house already in the
    collection run its visitor cycle (§6.13) with the previous frame's time (the clock is
-   re-sampled only in step 9), so house timing lags the sprites by one frame.
+   re-sampled only in step 9), so house timing lags the sprites by one frame. In games this
+   step instead syncs the Context with the options under the game overrides (Chapter 9 §9.3)
+   and runs `Game.Update` (§9.5); there are no house cycles.
 4. Apply viewer options (always-on-top, taskbar, display bounds).
 5. **Screensaver exit check** (§8.11).
 6. **Drag** (§8.8.2).
@@ -200,7 +202,7 @@ Per frame, in this order:
    here) are queued in step 1 of the next frame and added in its step 8.
 10. If no sprites remain → return to the menu.
 11. **Sort** the collection for drawing: houses first; otherwise ascending `Region.bottom`;
-    stable.
+    stable (in games, scoreboard labels are sorted after everything else, Chapter 9 §9.5.6).
 12. **Sounds** (§8.7).
 13. **Draw** (Chapter 7 §7.6).
 
@@ -303,9 +305,10 @@ In games (Chapter 9) the add/remove/sleep items are absent.
 
 ### 8.8.4 Keyboard
 
-There are no global shortcuts. The only keyboard input is manual control (§6.14.3): player 1 =
-arrow keys + right Shift (boost); player 2 = W A S D + left Shift. It is polled each frame from
-the global keyboard state (RI: Windows only).
+There are no global shortcuts. The only keyboard input on the sprite surface is manual control
+(§6.14.3): player 1 = arrow keys + right Shift (boost); player 2 = W A S D + left Shift; in
+games also right Ctrl (player 1) / left Ctrl (player 2) as the kick key (Chapter 9 §9.5.2). It
+is polled each frame from the global keyboard state (RI: Windows only). Menu keys are in §8.4.
 
 ## 8.9 House options dialog
 
@@ -317,16 +320,19 @@ Edits a house definition **shared by every placed instance of that house**:
 * The spawn limits are two linked fields: changing the minimum sets the maximum's lower bound to
   it (raising the maximum if needed); changing the maximum sets the minimum's upper bound to it
   (lowering the minimum if needed). In the RI, before the house's values are loaded the minimum
-  ranges 0 – 50 (value 1) and the maximum 5 – 9999 (value 50); the dialog then assigns
-  `minspawn`, then `maxspawn`, and an out-of-range assignment is an unhandled error (§8.13).
+  ranges 0 – 50 (value 1) and the maximum 5 – 9999 (value 50); the dialog then assigns the
+  cycle time, `minspawn`, `maxspawn`, then the bias as tenths (`bias × 10` rounded half to
+  even), and an out-of-range assignment is an unhandled error (§8.13).
   RI defect: the minimum accepts 0, and the maximum's floor stays 5 until the minimum changes
   (loading `minspawn` 1 does not change it). Opening the dialog therefore fails for files that
-  load fine (Chapter 4 §4.2 accepts each value in 1 – 9999 and does not check min ≤ max) when
-  `minspawn` > 50, when `minspawn` = 1 and `maxspawn` < 5, or when `maxspawn` < `minspawn`; and
-  saving with minimum 0 fails with an unhandled error after cycle time and door position were
-  already applied in memory (`house.ini` is not written). **Recommendation:** minimum 1 – 9999,
-  maximum from the minimum to 9999; set the bounds before loading and clamp loaded values
-  (raising the maximum to the minimum if needed); validate everything before applying any field.
+  load fine (Chapter 4 §4.2 accepts `cycletime` 1 – 3600, `bias` 0 – 1, and each spawn value in
+  1 – 9999 without checking min ≤ max) when `cycletime` < 5, when `minspawn` > 50, when
+  `minspawn` = 1 and `maxspawn` < 5, when `maxspawn` < `minspawn`, or when `bias` ≤ 0.05 or
+  ≥ 0.95 (tenths 0 or 10); and saving with minimum 0 fails with an unhandled error after cycle
+  time and door position were already applied in memory (`house.ini` is not written).
+  **Recommendation:** minimum 1 – 9999, maximum from the minimum to 9999; set the bounds before
+  loading and clamp loaded values — cycle time and bias as well as the spawn limits (raising the
+  maximum to the minimum if needed); validate everything before applying any field.
 * Save, in order:
   1. copy cycle time, door position, minimum/maximum spawn and bias into the shared definition
      (effective at once for every placed instance);
@@ -402,6 +408,12 @@ references in other ponies; the image-center tool mirrors a center to the other 
   ⟨message⟩"), plus a warning dialog except on macOS.
 * RI quirk: the WinForms sprite surface's own UI thread silently ignores exceptions raised while
   handling its window messages.
-* Content errors never abort the program: bad lines, entities, ponies and houses are skipped
-  (Chapter 2 §2.2, Chapter 3 §3.5). Exception: a missing `Houses/` directory (§8.2 step 4).
-* Missing/undecodable images make a sprite invisible; missing sounds are silent.
+* Content errors found while loading do not abort the program: bad lines, entities, ponies and
+  houses are skipped (Chapter 2 §2.2, Chapter 3 §3.5). RI exceptions: a missing `Houses/`
+  directory (§8.2 step 4); image load failures, which cancel the launch or terminate the
+  program (Chapter 7 §7.7, §7.5.1); some `game.ini` problems, which make the game's launch fail
+  (Chapter 9 §9.2.1, §9.3) or are fatal at run time (§9.4); and some `house.ini` values that load
+  fine but crash the house dialog (§8.9).
+* Missing sounds are silent (§8.7). **Recommendation:** a missing or undecodable image makes its
+  sprite invisible but still simulated, instead of cancelling the launch or terminating
+  (Chapter 7 §7.7).

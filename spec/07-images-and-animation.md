@@ -189,7 +189,8 @@ body part.
 * **Blending.** Premultiplied source-over.
 * **Z-order.** Draw sprites in collection order, which the host sorts every frame
   (Chapter 8 §8.6): houses first, then everything else by ascending `Region.bottom`
-  (= y + height); equal keys keep their previous relative order (stable sort). Lower on screen
+  (= y + height), except that in games the scoreboard labels are sorted after everything else
+  (Chapter 9 §9.5.6); equal keys keep their previous relative order (stable sort). Lower on screen
   ⇒ drawn later ⇒ in front.
 * **Hit-testing** is rectangle-based (`Region`), not per-pixel. Mouse clicks on transparent
   pixels of a sprite *should* pass through to the desktop where the platform allows it (the RI
@@ -230,7 +231,8 @@ limitations — worth avoiding in a new implementation — are:
 * the computed z-order is **ignored** (window stacking is left to the window manager);
 * speech bubbles are not clamped to the screen;
 * manual keyboard control and window avoidance/containment are Windows-only;
-* context-menu callbacks run on worker threads.
+* context-menu callbacks run on worker threads (as on Windows; see the RI defect in
+  Chapter 1 §1.5).
 
 Practical choices for a new implementation:
 

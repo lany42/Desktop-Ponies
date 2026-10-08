@@ -88,7 +88,7 @@ Components are grouped by *layer*. "Behavioral" components are fully specified b
 | I1  | Content files → A | File formats: `pony.ini`, `house.ini`, `game.ini`, legacy `interactions.ini`, `.art`, GIF/PNG, MP3 | Ch. 3, 4, 9; §7.4–7.5 |
 | I2  | A → B | Definition objects (PonyBase etc.), including derived implicit behaviors | §3.15, Ch. 6 |
 | I3  | E2 → B1 | Options → Context synchronisation every frame | §6.2, §5.1 |
-| I4  | B ↔ C | Sprite contract: `Start(T)`, `Update(T)`, `Region`, `ImagePaths`, `FacingRight`, `ImageTimeIndex`, `PreventAnimationLoop`, `SpeechText`, `SoundPath`, `Drag`, `Expire()` / `Expired` | §7.1 |
+| I4  | B ↔ C | Sprite contract: `Start(T)`, `Update(T)`, `Region`, `ImagePaths`, `FacingRight`, `ImageTimeIndex`, `PreventAnimationLoop`, `SpeechText`, `SoundPath`, `Drag`, `Expire()` / `Expired` | §7.1; `Drag` §8.8.2; `Expire()` / `Expired` §6.14.1, §8.6 |
 | I5  | C/E, B4, B6 → B2 | External control API: `Sleep`, `Drag`, `DestinationOverride`, `MovementOverride`, `SpeedOverride`, `FollowTargetOverride`, writable `Location`, `SetBehavior`, `Speak`, `Expire`, `InitializeInteractions`; read-only queries `Region`, `Base`, `CurrentBehavior`, `Movement`, `AtDestination`, `IsBusy`, and the `Expired` event (see below) | §6.14, §6.13, Ch. 9 |
 | I6  | B → C | Pending-sprite channel (effects, visitors spawned during update) | §6.1 |
 | I7  | C → D1 | Renderer contract: open/close/show/hide/pause/resume, draw sorted sprites, cursor, buttons, focus, click events, context menus, topmost, taskbar | §7.6, §8.8 |
@@ -103,7 +103,7 @@ I5 members not covered by §6.14.1:
   and no behavior, destination or flag changes. The cached `Region` stays stale until the
   pony's next update. If it is set before `Start`, it replaces the random spawn point (§6.15).
   RI writers: house visitor deploy (door position, §6.13), game ball placement at
-  initialisation and at ReadyBalls (§9.5.1), and game push-apart (§9.5.4).
+  initialisation and at ReadyBalls (§9.3, §9.5.1), and game push-apart (§9.5.4).
 * **`AtDestination`**: true iff a destination was set in the last step and
   `|L − destination|² < ε`. Games poll it in WaitForPositions.
 * **`Movement`**: the last step's movement vector. Games use it for the ball's bounce direction
@@ -169,8 +169,11 @@ the animation loop, so the changes land at arbitrary points within a frame:
   stale overrides.
 * Add Pony appends to the plain pending-sprite list that the animation thread copies and clears;
   an addition may be lost. Add House builds the house, initialises its visitor list and
-  teleports it on the pool thread, then queues it. Remove, Remove Every and house Remove
-  enqueue onto the action queue without a lock (only draining it takes the write lock).
+  teleports it on the pool thread, then queues it. Remove and Remove Every enqueue removals onto
+  the action queue without a lock (only draining it takes the write lock).
+* House Remove expires the house on the pool thread, so its expiry handler (clears the
+  `DestinationOverride` of every pony it tracks and empties its tracking sets, §8.8.3) races
+  the house cycle and pony updates; only the resulting removal is queued.
 * Return To Menu and Exit run the whole finish sequence on the pool thread: set the exit
   request, expire every sprite, dispose the loop and join the animation thread.
 
