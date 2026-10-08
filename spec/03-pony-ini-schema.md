@@ -116,11 +116,15 @@ Consequences that implementations MUST reproduce:
 
 ### 3.3.2 Unbalanced qualifiers
 
-* Q: if splitting fails, retry once with a `"` appended to the line.
-* QB: if splitting fails, retry with `"` appended; if that also fails, retry with `}` appended
-  to the **original** line.
-* RI defect: if the final QB retry also fails, an exception escapes and the **whole pony fails
-  to load**. **Recommendation:** treat the single line as invalid and continue.
+Splitting can only fail at the first opening qualifier that has no closing partner. The RI
+recovers by appending a closer and splitting again:
+
+* Q: retry once with a `"` appended to the line.
+* QB: retry with `"` appended; if that also fails (the unclosed qualifier was `{`), retry with
+  `}` appended to the **original** line.
+
+These retries always succeed. The effect to reproduce: **an unclosed qualifier swallows the
+rest of the line, commas included, into one field** (e.g. `a,"b,c` → `a`, `b,c`).
 
 ## 3.4 Scalar value grammars
 
@@ -129,14 +133,20 @@ All numeric parsing is culture-invariant (`.` is the decimal separator regardles
 | Kind      | Accepted syntax                                                                                                   | Notes |
 |-----------|-------------------------------------------------------------------------------------------------------------------|-------|
 | `int`     | optional surrounding whitespace, optional leading `+`/`-`, ASCII digits; 32-bit range                             | `1.0` is **not** a valid int |
-| `real`    | optional surrounding whitespace, optional sign, digits with optional `.` fraction, optional exponent (`1e-3`)     | Implementations SHOULD reject `NaN`/`Infinity` (RI accepts them and then crashes on load) |
-| `decimal` | as `real` but no exponent (used only by `house.ini` `bias`)                                                      | |
+| `real`    | optional surrounding whitespace, optional sign, digits with optional `.` fraction, optional exponent (`1e-3`); `,` thousands separators are also accepted (only reachable inside quotes: `"1,5"` reads as 15) | See note on NaN/Infinity below |
+| `decimal` | as `real` but no exponent; a trailing sign is also accepted (used only by `house.ini` `bias`)                   | |
 | `bool`    | `true` or `false`, **case-insensitive**, surrounding whitespace allowed                                           | The old techdoc says case-sensitive; RI accepts any case. Writers MUST emit `True`/`False`. |
 | `vector`  | a *single field* containing exactly two `int`s separated by one comma, e.g. `"44,46"` (quotes needed in the line so the comma does not split the field) | anything else is invalid |
 | `name`    | free text; compared case-insensitively when used as a reference                                                    | per-field trimming noted below |
 | `pony-id` | free text; compared **case-sensitively and exactly** against pony directory names                                  | |
 | `path`    | a file name relative to the pony directory                                                                        | see §3.4.1 |
 | `list`    | a field that itself is split with **Q**; empty/whitespace-only entries are dropped; duplicates collapse (set semantics) | written as `{"a","b"}` |
+
+`NaN` and `Infinity` are syntactically valid reals. In the RI, `Infinity`/`-Infinity` fail
+every range check (all real fields have finite ranges) and fall back to the default. `NaN`
+passes range checks: in a duration field it then makes the **whole pony** fail to load; in
+Chance/Speed/Proximity it is stored and misbehaves at run time (an interaction with Chance NaN
+fires every step). **Recommendation:** treat `NaN`/`Infinity` as invalid (use the default).
 
 ### 3.4.1 Paths
 
@@ -164,9 +174,10 @@ Every field of every entity line is in exactly one of three classes:
 3. **Unparsed** — taken verbatim.
 
 When loading for the desktop runtime, the RI drops any entity with a fatal issue
-("remove invalid items" mode). After loading, a **pony with zero behaviors is dropped** from the
-collection entirely (this includes directories with no `pony.ini`). The editor loads in
-permissive mode and keeps entities with fatal issues so they can be fixed.
+("remove invalid items" mode), and then drops any **pony left with zero behaviors** from the
+collection entirely (this includes directories with no `pony.ini`). The editors load in
+permissive mode: entities with fatal issues and ponies without behaviors are kept so they can be
+fixed.
 
 Referential problems (dangling or ambiguous names, loops) are **not** load errors; they are
 resolved lazily at run time (§3.14) and only reported by the editor.
@@ -264,8 +275,11 @@ kept as written. The duration draw (§6.5.3) is `Min + U·(Max − Min)`, which 
 between the two, so the effect is the same as if they were swapped.
 
 > **Pitfall:** image centers MUST be quoted (`"44,46"`). Unquoted, `44,46` becomes two fields and
-> every subsequent field shifts by one. The RI does not detect this; all later fields simply fall
-> back to defaults with warnings.
+> every subsequent field shifts by one. The RI does not detect this: each shifted value is parsed
+> as the field it lands in, so values that happen to be valid are silently used and the rest fall
+> back to defaults with warnings. Example: `…,44,46,43,46,False,0,Fixed` gives both centers
+> invalid (default), PreventAnimationLoop `43` invalid (default), **Group = 46** (valid!), and
+> FollowOffsetType `False` invalid (default).
 
 ### 3.9.2 `Movement` values
 
@@ -308,14 +322,17 @@ The exact angles and the selection procedure are in §6.6.2.
 * **LinkedBehavior** — when this behavior's time runs out, start the named behavior instead of
   a random one. Chains end at a behavior without a valid link. Used to build sequences
   (`roll-start → roll → roll-end`). An unresolvable link behaves as "no link". The editor
-  rejects cycles but the runtime tolerates them (a cycle simply loops forever).
+  warns about cycles (it does not reject them); the runtime tolerates them (a cycle simply loops
+  forever).
 * **StartSpeech** — name of a speech (§3.11) spoken when the behavior is entered *with speech
   enabled for that transition* (§6.5.1).
 * **EndSpeech** — name of a speech spoken when the behavior ends because its time ran out.
   If the next behavior has a start speech, that speech replaces this one immediately (only one
   bubble is visible at a time).
-* **Skip** — `True` excludes the behavior from random selection. It can then only be reached
-  by link, interaction, follow-image selection, or the special-state machinery.
+* **Skip** — `True` excludes the behavior from random selection. It is then normally reached
+  only by link, interaction, follow-image selection, or the special-state machinery — but the
+  candidate cascade (§6.5.2) falls back to skipped behaviors when no non-skipped candidate
+  exists (e.g. when picking a moving/stationary behavior for a custom destination).
 * **TargetX / TargetY / FollowTarget** — define the *target mode* of the behavior:
 
   | FollowTarget | (TargetX,TargetY) | Target mode | Meaning |
@@ -324,9 +341,12 @@ The exact angles and the selection procedure are in §6.6.2.
   | empty        | ≠ (0,0)           | **Point**   | Seek the absolute point at (TargetX %, TargetY %) of the allowed screen area (0–100 per axis; values outside 0–100 target points outside the area). |
   | empty        | (0,0)             | **None**    | Move freely according to Movement. (Consequently the exact top-left corner cannot be targeted.) |
 
-  In Pony mode, if no instance of the target is present the behavior acts as mode None (free
-  movement, own images). The pony moves toward the target at this behavior's Speed even if
-  Movement is `None`; Movement only governs *free* movement.
+  In Pony mode the target instance is chosen **once, when the behavior starts** (§6.7.2), never
+  the pony itself. If no instance is present at that moment, the behavior acts as mode None for
+  its whole duration (free movement, own images) even if a target appears later. If the chosen
+  target disappears mid-behavior, the pony switches to free movement (keeping its current
+  directions). The pony moves toward the target at this behavior's Speed even if Movement is
+  `None`; Movement only governs *free* movement.
 * **FollowOffsetType** — in Pony mode, `Fixed` uses the offset as-is; `Mirror` negates the X
   offset while the *target* faces left (offsets are authored for a right-facing target), so
   `(-50,0)` + `Mirror` means "50 px behind the target".
@@ -422,7 +442,7 @@ Full runtime rules: §6.8.
 
 A speech line: text shown in a bubble, optionally with a sound.
 
-Three accepted shapes (split with **QB**):
+Two accepted shapes (split with **QB**):
 
 ```
 Speak,⟨Text⟩                                             (2 fields: unnamed)
@@ -441,9 +461,13 @@ where ⟨Sound⟩ is either empty, a single (optionally quoted) file name, or a 
 
 Rules:
 
-* **Exactly two fields** → the line is *unnamed*: field 1 is the text, the name is absent
-  (displayed as "Unnamed"), and all other fields take their defaults. An unnamed speech can only
-  ever be used as a random speech, never by reference.
+* **Exactly two fields** → the line is *unnamed*: field 1 is the text, the name is absent,
+  and all other fields take their defaults. A truly unnamed speech can only ever be used as a
+  random speech, never by reference.
+* **Three or more fields with a blank name** → the name becomes the literal `Unnamed` (with a
+  warning). That *is* a real name and can be referenced (and several such lines make it
+  non-unique). Note that the canonical writer (§3.16) writes two-field unnamed speeches as
+  `"Unnamed"`, so after an editor round trip they become named.
 * **Sound**: the field (after QB removed any braces) is split again with **Q**; the **first entry
   whose extension is `.mp3`** becomes the sound file. If no entry ends in `.mp3` there is no
   sound — so a lone `"hello.ogg"` or `"hello.wav"` yields *no sound* in the RI. The `.mp3`
@@ -456,7 +480,8 @@ Rules:
   behavior's start/end speech.
 * **Group** — a random speech is eligible only if its group is 0 or equals the current
   behavior's group.
-* Text cannot contain `"`; it may contain commas when quoted.
+* Text may contain commas when quoted. It can contain `"` only inside a brace-qualified field
+  (`{He said "hi"}`), which the parser accepts but the canonical writer cannot produce.
 
 ## 3.12 `Interaction`
 
@@ -485,21 +510,24 @@ Split with **QB**.
 
   | Token                                   | Value |
   |-----------------------------------------|-------|
-  | `One` (case-sensitive)                  | One   |
-  | `Any` (case-sensitive)                  | Any   |
-  | `All` (case-sensitive)                  | All   |
-  | `False` or `random` (case-insensitive)  | One (legacy) |
-  | `True` or `all` (case-insensitive, but *not* the exact spelling `All`) | Any (legacy) |
-  | `0`, `1`, `2`                           | One, Any, All (RI quirk) |
+  | `One` (case-sensitive, surrounding whitespace ignored) | One   |
+  | `Any` (case-sensitive, surrounding whitespace ignored) | Any   |
+  | `All` (case-sensitive, surrounding whitespace ignored) | All   |
+  | `False` or `random` (case-insensitive, untrimmed)  | One (legacy) |
+  | `True` or `all` (case-insensitive, untrimmed, but *not* the exact spelling `All`) | Any (legacy) |
+  | `0`, `1`, `2` (any integer parses; values other than 0–2 fall back to One with a warning) | One, Any, All (RI quirk) |
+  | anything else                           | One, with a warning |
 
-  Note the trap: `All` means **All** but `all`/`ALL` mean **Any**.
+  Note the trap: `All` means **All** but `all`/`ALL` mean **Any**. FollowOffsetType (§3.9.1)
+  uses the same canonical-name rules (case-sensitive, trimmed, integers accepted).
 * **Behaviors** — names of behaviors to run; each participant independently picks one it owns
   (§6.10). Typically one name, often the first link of a chain present in every participant's
   `pony.ini`.
 * **Chance** is rolled **every simulation step** (25 times per second) while the interaction is
   eligible, so even small values trigger quickly once ponies are in range.
-* **Proximity** — maximum center-to-center distance (inclusive) between the initiator and a
-  triggering target.
+* **Proximity** — maximum distance (inclusive) between the initiator's and a triggering
+  target's *location points* — their image anchors (custom centers when set), not the geometric
+  centers of their rectangles.
 * **ReactivationDelay** — cool-down after the interaction ends, during which participants
   cannot *initiate* interactions (they may still be targets). A forced cancel caps it at 30 s.
 
@@ -517,12 +545,13 @@ Full runtime rules: §6.10.
 | Behavior.StartSpeech / EndSpeech            | this pony's speeches                     | case-insensitive  | unique match |
 | Behavior.FollowStopped/MovingBehavior       | this pony's behaviors                    | case-insensitive  | unique match |
 | Effect.BehaviorName                         | this pony's behaviors                    | case-insensitive  | **every** match fires |
-| Behavior.FollowTarget                       | directory names of *live instances*      | case-sensitive    | any instance |
+| Behavior.FollowTarget                       | directory names of *live instances*      | case-sensitive    | any instance except the pony itself |
 | Interaction.Targets                         | directory names of *live instances*      | case-sensitive    | any instance |
 | Interaction.Behaviors                       | each participant's behaviors             | case-insensitive  | set membership |
 
 **Unique match:** if exactly one entity matches, use it; if zero *or two or more* match, the
-reference resolves to nothing. An empty name never resolves. Unnamed speeches never match.
+reference resolves to nothing. An empty name never resolves. Two-field (truly unnamed)
+speeches never match; speeches named `Unnamed` (§3.11) do.
 
 ## 3.15 Implicit (derived) behaviors
 
@@ -550,12 +579,15 @@ round-trip with other tools:
 1. All comment lines, in original order.
 2. `Name,⟨DisplayName⟩` (unquoted).
 3. `Categories,"t1","t2",…` (each tag quoted; a pony with no tags writes `Categories,` — note
-   the trailing comma).
+   the trailing comma. RI defect: that line re-reads as one empty tag, so the next save writes
+   `Categories,""`; **Recommendation:** ignore empty tags on read).
 4. One `behaviorgroup,⟨n⟩,⟨name⟩` per group (identifier lower-case, name unquoted).
 5. Behaviors:
    `Behavior,"name",chance,max,min,speed,"right.gif","left.gif",Movement,"linked","start","end",Skip,tx,ty,"follow",AutoSelect,"stopped","moving","rx,ry","lx,ly",PreventLoop,group,FollowOffsetType`
-   — names/paths quoted; centers written `"0,0"` when unset; numbers in invariant culture,
-   shortest round-trip form; booleans `True`/`False`; enums in the canonical spellings above.
+   — names/paths quoted; centers written `"0,0"` when unset; numbers in invariant culture
+   using the general format with up to 15 significant digits (e.g. `0.35`, `15`, `1E-05`);
+   booleans `True`/`False`; enums in the canonical spellings above. All durations are held in
+   whole milliseconds, so values are rounded to 0.001 s on load and written back rounded.
 6. Effects:
    `Effect,"name","behavior","right.gif","left.gif",duration,delay,PR,CR,PL,CL,Follow,PreventLoop`.
 7. Speeches: `Speak,"name","text",,Skip,Group` without sound, or
@@ -567,7 +599,10 @@ round-trip with other tools:
 9. All invalid/unknown lines, verbatim.
 
 Paths are written as bare file names. Values containing `"` (or `{`/`}` inside lists) cannot be
-represented and MUST be rejected by an editor.
+represented and MUST be rejected by an editor. The display name, behavior group names and
+interaction names are written **unquoted** without validation, so a comma or `"` in them corrupts
+the line; an editor SHOULD reject those characters (the RI editors do). The file is written as
+UTF-8 with a BOM, with the platform's line ending.
 
 ## 3.17 Legacy `Ponies/interactions.ini`
 
@@ -581,7 +616,12 @@ support a one-time migration at start-up:
 * For each line that parses without fatal issues and whose `Ponies/⟨Initiator⟩/pony.ini`
   exists, append the canonical `Interaction,…` line (§3.16) to that file.
 * Delete `interactions.ini`; if any lines could not be migrated, write just those lines back to
-  a new `interactions.ini`.
+  a new `interactions.ini` (they are retried on every start).
+* RI defect: the line is appended without first ensuring the target file ends with a line break;
+  several shipped `pony.ini` files have no final newline, so the new line would be glued onto
+  their last line. **Recommendation:** insert a line break if needed.
+* The RI runs this migration whenever it loads the pony collection (including from the
+  editors).
 
 An implementation that does not want to write into the content directory MAY instead read the
 legacy file and merge its interactions in memory.
@@ -618,17 +658,21 @@ Reading it:
 * `walk` moves at 3 × 33.3 ≈ 100 px/s, diagonally (15°–45° from horizontal) or horizontally.
 * `giddyup` (weight 0.02) says the skip-only speech `giddyup_sound` ("Yeee...") when it starts
   and, after 1.2–1.4 s, links to `gallop`. `gallop` has `Skip=True` so it is reached only via
-  the link; it says "Haw!" on entry, runs 3–6 s at ≈ 267 px/s diagonally, and while it runs the
+  the link (§6.5.2 fallbacks aside); it says "Haw!" on entry, runs 3–6 s at ≈ 267 px/s diagonally, and while it runs the
   `Apple Drop` effect is spawned at the pony's bottom-center at start and every 0.8 s, each
   living 3.3 s and staying where it was dropped.
 * `Interaction AJ Truck`: when a Twilight Sparkle instance is within 300 px, every step there
   is a 5 % chance that Applejack and that Twilight both switch to a behavior named
-  `truck_twilight`. Applejack's `truck_twilight` targets "Twilight Sparkle" but has speed 0, so
-  she stays put (the destination is computed, but a zero speed never moves her); it shows the
-  images of `truck_twilight` itself both when stopped and moving (auto-select off), lasts 6 s,
-  and links through `truck_twilight2…4` (each speaking a line on entry) to `truck_drive`, which
-  has no link. When a participant's behavior with no link ends, that participant leaves the
-  interaction; after that neither participant can *initiate* any interaction for 300 s.
+  `truck_twilight` (Applejack is the *initiator*, Twilight the *target*). Applejack's
+  `truck_twilight` targets "Twilight Sparkle" but has speed 0, so she stays put — the destination
+  is computed and she turns to face it, but a zero speed never moves her. It shows the images of
+  `truck_twilight` itself both when stopped and moving (auto-select off), lasts 6 s, and links
+  through `truck_twilight2…4` (each speaking a line on entry) to `truck_drive` (60 s), which has
+  no link. Twilight runs her own `truck_twilight` chain from her own `pony.ini`. When a target's
+  chain reaches a behavior with no link and that behavior ends, the target leaves the
+  interaction and its 300 s cool-down starts; when the *initiator's* chain ends, it ends the
+  interaction for every target still in it. Each participant's cool-down (no *initiating* of
+  interactions for 300 s) starts when it leaves.
 * `Conga` follows Rainbow Dash at offset (−37,−2) mirrored, i.e. just behind her whichever way
   she faces.
 * `Sleep` is the sleep behavior; `drag` (Skip) is shown while the user drags Applejack.

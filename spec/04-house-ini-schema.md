@@ -38,13 +38,16 @@ All keyed lines are split with the **QB** splitter (§3.3).
 * A keyed line with a fatal issue is ignored (the property keeps its default/previous value).
   Repeated keys: last one wins.
 * `image` sets the same file for both facings (houses never turn).
-* `door` is the door position in **image pixels** relative to the image's top-left corner.
-  Ponies are released from and recalled to this point (their anchor point is placed on it).
+* `door` is the door position relative to the image's top-left corner. Ponies are released
+  from and recalled to this point (their anchor point is placed on it). The RI adds it
+  **unscaled** to the house's screen position, while the house image is drawn scaled, so it is
+  in image pixels only at scale 1 (see Q28 in Chapter 10).
 * `cycletime` — seconds between visitor cycles. RI defect: a value of `0` passes the range check
   but then makes the whole house fail to load. **Recommendation:** treat values < 1 as invalid
   (use the default).
 * `minspawn` / `maxspawn` — the house will not recall when it has ≤ minspawn deployed ponies,
-  and will not deploy when it has ≥ maxspawn deployed ponies.
+  and will not deploy when it has ≥ maxspawn deployed ponies. `minspawn > maxspawn` is not
+  rejected at load.
 * `bias` — probability that a (non-skipped) cycle tries to *deploy* rather than *recall*.
 
 ## 4.3 Visitors
@@ -57,12 +60,13 @@ All keyed lines are split with the **QB** splitter (§3.3).
 
 ## 4.4 Ordering
 
-Loaded houses are presented sorted by Name (ordinal). The RI loads houses in parallel; order of
-loading is irrelevant.
+Loaded houses are presented sorted by Name (ordinal, case-insensitive). The RI loads houses in
+parallel; order of loading is irrelevant.
 
 ## 4.5 Canonical serialisation
 
-Written by the RI's house options dialog (Chapter 8 §8.9), UTF-8 with BOM:
+Written by the RI's house options dialog (Chapter 8 §8.9), UTF-8 with BOM. Only comment lines
+survive from the previous file; bias is quantised to tenths by that dialog:
 
 ```
 ⟨comment lines⟩

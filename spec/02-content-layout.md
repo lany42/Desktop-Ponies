@@ -39,8 +39,9 @@ letters (`Jesús Pezuña`). Implementations MUST treat names as opaque Unicode s
 
 ## 2.2 Discovery and load order
 
-1. Enumerate the immediate subdirectories of `Ponies/` and `Houses/` (a missing `Houses/`
-   directory crashes the RI; **Recommendation:** treat a missing directory as empty).
+1. Enumerate the immediate subdirectories of `Ponies/` and `Houses/`. In the RI a missing
+   directory throws (the menu checks for `Ponies/` beforehand and shows an error; a missing
+   `Houses/` crashes start-up). **Recommendation:** treat a missing `Houses/` as empty.
 2. Migrate the legacy `Ponies/interactions.ini` if present (Chapter 3 §3.17). This happens
    before any pony is loaded so that migrated interactions are seen.
 3. Load every pony directory (in any order / in parallel):
