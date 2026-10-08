@@ -77,7 +77,7 @@ the selectable pony list, from house deployment, and from editors' lists.
 | Behavior / speech / effect / interaction names | case-insensitive |
 | Tags                         | case-insensitive |
 | File names (images, sounds)  | host file-system rules (case-sensitive on Linux); see §3.4.1 recommendation |
-| Profile names                | case-insensitive for `default`/`screensaver`/`autostart`; file-system rules otherwise |
+| Profile names                | `default` case-insensitive; other names (including `screensaver` and `autostart`) follow file-system rules and the case-sensitive list lookup of §8.2 |
 | Visitor keyword `all`        | case-insensitive |
 
 The shipped corpus contains no case mismatches between references and files, so a strictly
